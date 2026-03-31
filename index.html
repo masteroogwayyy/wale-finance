@@ -467,6 +467,34 @@ select option, select optgroup { background: var(--s2); }
   .form-row { grid-template-columns: 1fr; }
   .entry-table thead th:nth-child(4), .entry-table tbody td:nth-child(4) { display:none; }
 }
+
+/* ═══════════════════════════════════════════════════════
+   SYNC INDICATOR
+═══════════════════════════════════════════════════════ */
+.sync-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--muted);
+  padding: 0 12px;
+  white-space: nowrap;
+  user-select: none;
+}
+.sync-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #555;
+  transition: background 0.3s;
+}
+.sync-dot.local   { background: #555; }
+.sync-dot.syncing { background: var(--amber); animation: syncpulse 0.9s ease-in-out infinite; }
+.sync-dot.ok      { background: var(--green); }
+.sync-dot.error   { background: var(--red); }
+@keyframes syncpulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
 </style>
 </head>
 <body>
@@ -480,6 +508,10 @@ select option, select optgroup { background: var(--s2); }
   <div class="nav-tab active"      data-page="overview"  onclick="switchPage('overview')">📊 Overview</div>
   <div class="nav-tab"             data-page="expenses"  onclick="switchPage('expenses')">💳 Expenses</div>
   <div class="nav-tab miles-tab"   data-page="miles"     onclick="switchPage('miles')">✈️ Miles & Points</div>
+  <div class="sync-status" id="syncStatus" title="Google Sheets sync status">
+    <div class="sync-dot local" id="syncDot"></div>
+    <span id="syncLabel">Local</span>
+  </div>
 </nav>
 
 <!-- ══════════════════════════════════════════════════════════════
@@ -882,12 +914,153 @@ const CARDS = {
 const STORE_KEY = "expTracker_v3";
 let S = { entries:[], archive:{}, lastReset:{} };
 
-function loadState() {
-  try { const raw = localStorage.getItem(STORE_KEY); if (raw) S = JSON.parse(raw); } catch(_) {}
-  const today = today0();
-  Object.keys(CARDS).forEach(id => { if (!S.lastReset[id]) S.lastReset[id] = fmtDate(cycleStart(today, CARDS[id].resetDay)); });
+/* ─── GOOGLE SHEETS SYNC CONFIG ───────────────────────────────────────
+   Paste your Google Apps Script Web App URL below after completing setup.
+   Leave empty ('') to run in local-only mode (original localStorage behaviour).
+   See GoogleAppsScript.gs for full setup instructions.
+──────────────────────────────────────────────────────────────────────── */
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx7y1oBtjYeRMtHt3vC5n8iGt5L-hzSFDPzfp-0cLia8WgSaZvbOqfdlXUjN75ppHXt/exec'
+/* ─── SYNC UTILITIES ──────────────────────────────────────────────── */
+function setSyncStatus(state) {
+  const dot   = document.getElementById('syncDot');
+  const label = document.getElementById('syncLabel');
+  if (!dot || !label) return;
+  dot.className = 'sync-dot ' + state;
+  const labels = { local:'Local', syncing:'Syncing…', ok:'Synced ✓', error:'Sync failed' };
+  label.textContent = labels[state] || state;
 }
-function saveState() { localStorage.setItem(STORE_KEY, JSON.stringify(S)); }
+
+function buildFullState() {
+  return {
+    expenses: S,
+    miles: {
+      version:      MT_DATA_VERSION,
+      balances:     mtBalances,
+      redemptions:  mtRedemptions,
+      earnings:     mtEarnings,
+      expiry:       mtExpiry
+    }
+  };
+}
+
+let _syncTimeout = null;
+function scheduleSyncToSheets() {
+  if (!APPS_SCRIPT_URL) return;
+  clearTimeout(_syncTimeout);
+  _syncTimeout = setTimeout(syncToSheets, 800);  // debounce — batch rapid saves
+}
+
+async function syncToSheets() {
+  if (!APPS_SCRIPT_URL) return;
+  setSyncStatus('syncing');
+  try {
+    // Use no-cors so the POST works from file:// origins without CORS preflight.
+    // We can't read the response in no-cors mode, but the request reaches the server.
+    await fetch(APPS_SCRIPT_URL, {
+      method:  'POST',
+      mode:    'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body:    JSON.stringify(buildFullState())
+    });
+    setSyncStatus('ok');
+  } catch(err) {
+    console.error('[Sync] Save failed:', err);
+    setSyncStatus('error');
+  }
+}
+
+// JSONP loader — works from file:// origins (no CORS issues for script tags)
+function jsonpLoad(url) {
+  return new Promise((resolve, reject) => {
+    const cbName = '_gscb_' + Date.now();
+    const timeout = setTimeout(() => {
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      reject(new Error('JSONP timeout'));
+    }, 12000);
+    window[cbName] = (data) => {
+      clearTimeout(timeout);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve(data);
+    };
+    const script = document.createElement('script');
+    script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName + '&t=' + Date.now();
+    script.onerror = () => { clearTimeout(timeout); reject(new Error('Script load failed')); };
+    document.head.appendChild(script);
+  });
+}
+
+/* ─── LOAD / SAVE STATE ──────────────────────────────────────────── */
+async function loadAllState() {
+  const today = today0();
+
+  if (!APPS_SCRIPT_URL) {
+    // ── Local-only mode ──────────────────────────────────────────
+    setSyncStatus('local');
+    try { const raw = localStorage.getItem(STORE_KEY); if (raw) S = JSON.parse(raw); } catch(_) {}
+    _loadMilesFromLocal();
+    Object.keys(CARDS).forEach(id => { if (!S.lastReset[id]) S.lastReset[id] = fmtDate(cycleStart(today, CARDS[id].resetDay)); });
+    return;
+  }
+
+  // ── Google Sheets mode ───────────────────────────────────────
+  setSyncStatus('syncing');
+  try {
+    // Use JSONP to load — works from file:// origins without CORS restrictions
+    const data = await jsonpLoad(APPS_SCRIPT_URL);
+
+    // Expenses
+    if (data.expenses && data.expenses.entries !== undefined) {
+      S = data.expenses;
+    } else {
+      // First run — try migrate from localStorage
+      try { const raw = localStorage.getItem(STORE_KEY); if (raw) S = JSON.parse(raw); } catch(_) {}
+    }
+    Object.keys(CARDS).forEach(id => { if (!S.lastReset[id]) S.lastReset[id] = fmtDate(cycleStart(today, CARDS[id].resetDay)); });
+
+    // Miles
+    const miles = data.miles || {};
+    if (!miles.version || miles.version !== MT_DATA_VERSION) {
+      mtBalances = Object.assign({}, MT_DEFAULT_BALANCES);
+    } else {
+      mtBalances = miles.balances || {};
+    }
+    mtRedemptions = miles.redemptions || [];
+    mtEarnings    = miles.earnings    || [];
+    mtExpiry      = miles.expiry      || {};
+    PROGRAMS.forEach(p => { if (mtBalances[p.id] === undefined) mtBalances[p.id] = MT_DEFAULT_BALANCES[p.id] || 0; });
+
+    // Update localStorage cache
+    localStorage.setItem(STORE_KEY, JSON.stringify(S));
+
+    setSyncStatus('ok');
+  } catch(err) {
+    console.error('[Sync] Load failed:', err);
+    setSyncStatus('error');
+    // Fall back to localStorage
+    try { const raw = localStorage.getItem(STORE_KEY); if (raw) S = JSON.parse(raw); } catch(_) {}
+    _loadMilesFromLocal();
+    Object.keys(CARDS).forEach(id => { if (!S.lastReset[id]) S.lastReset[id] = fmtDate(cycleStart(today, CARDS[id].resetDay)); });
+  }
+}
+
+function _loadMilesFromLocal() {
+  if (mtLoad('mt_version', null) !== MT_DATA_VERSION) {
+    mtSave('mt_version', MT_DATA_VERSION);
+    localStorage.removeItem('mt_balances');
+  }
+  mtBalances    = mtLoad('mt_balances',    {});
+  mtRedemptions = mtLoad('mt_redemptions', []);
+  mtEarnings    = mtLoad('mt_earnings',    []);
+  mtExpiry      = mtLoad('mt_expiry',      {});
+  PROGRAMS.forEach(p => { if (mtBalances[p.id] === undefined) mtBalances[p.id] = MT_DEFAULT_BALANCES[p.id] || 0; });
+}
+
+function saveState() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(S));
+  scheduleSyncToSheets();
+}
 
 function today0() { const d=new Date(); d.setHours(0,0,0,0); return d; }
 function fmtDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
@@ -1025,6 +1198,8 @@ function confirmResetAll(){
   S={entries:[],archive:{},lastReset:{}};
   const today=today0(); Object.keys(CARDS).forEach(id=>{S.lastReset[id]=fmtDate(cycleStart(today,CARDS[id].resetDay));});
   saveState(); renderAll(); showToast('All data cleared.','warning');
+  // Also sync the cleared state to Google Sheets
+  syncToSheets();
 }
 
 function toggleArchive(){
@@ -1068,20 +1243,13 @@ const PROGRAMS = [
 ];
 
 function mtLoad(key,def){try{const v=localStorage.getItem(key);return v?JSON.parse(v):def;}catch(e){return def;}}
-function mtSave(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
+function mtSave(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){} scheduleSyncToSheets();}
 
-// Reset localStorage if data version has changed (skill bumped the version)
-if(mtLoad('mt_version',null)!==MT_DATA_VERSION){
-  mtSave('mt_version',MT_DATA_VERSION);
-  mtSave('mt_balances',{});
-}
-let mtBalances    = mtLoad('mt_balances',{});
-let mtRedemptions = mtLoad('mt_redemptions',[]);
-let mtEarnings    = mtLoad('mt_earnings',[]);
-let mtExpiry      = mtLoad('mt_expiry',{});
-
-// Init from defaults
-PROGRAMS.forEach(p=>{if(mtBalances[p.id]===undefined) mtBalances[p.id]=MT_DEFAULT_BALANCES[p.id]||0;});
+// Miles state — populated by loadAllState() in init
+let mtBalances    = {};
+let mtRedemptions = [];
+let mtEarnings    = [];
+let mtExpiry      = {};
 
 // ── Expiry helpers ─────────────────────────────────────────────
 function expiryDaysLeft(dateStr) {
@@ -1399,13 +1567,17 @@ function renderOverview(){
 /* ═══════════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════════ */
-(function init(){
+(async function init(){
   // Expenses
   const today = new Date();
   document.getElementById('expTodayLabel').textContent =
     today.toLocaleDateString('en-SG',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   document.getElementById('fDate').value = fmtDate(today);
-  loadState(); checkCycleResets(); syncCatDropdown(); renderAll();
+
+  // Load all state (async — fetches from Google Sheets if configured)
+  await loadAllState();
+
+  checkCycleResets(); syncCatDropdown(); renderAll();
 
   // Miles
   document.getElementById('rDate').value = todayStr();
