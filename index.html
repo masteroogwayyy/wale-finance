@@ -505,9 +505,9 @@ select option, select optgroup { background: var(--s2); }
 <!-- ── TOP NAV ────────────────────────────────────────────────── -->
 <nav class="topnav">
   <div class="topnav-brand">WA Finance</div>
-  <div class="nav-tab active"      data-page="overview"  onclick="switchPage('overview')">📊 Overview</div>
-  <div class="nav-tab"             data-page="expenses"  onclick="switchPage('expenses')">💳 Expenses</div>
+  <div class="nav-tab active"       data-page="expenses"  onclick="switchPage('expenses')">💳 Expenses</div>
   <div class="nav-tab miles-tab"   data-page="miles"     onclick="switchPage('miles')">✈️ Miles & Points</div>
+  <div class="nav-tab"             data-page="overview"  onclick="switchPage('overview')">📊 Overview</div>
   <div class="sync-status" id="syncStatus" title="Google Sheets sync status">
     <div class="sync-dot local" id="syncDot"></div>
     <span id="syncLabel">Local</span>
@@ -517,7 +517,7 @@ select option, select optgroup { background: var(--s2); }
 <!-- ══════════════════════════════════════════════════════════════
      PAGE: OVERVIEW
 ══════════════════════════════════════════════════════════════ -->
-<div class="page active" id="page-overview">
+<div class="page" id="page-overview">
 <div class="wrap">
   <div class="ov-header">
     <h1>📊 <span>Finance</span> Overview</h1>
@@ -587,7 +587,7 @@ select option, select optgroup { background: var(--s2); }
 <!-- ══════════════════════════════════════════════════════════════
      PAGE: EXPENSES
 ══════════════════════════════════════════════════════════════ -->
-<div class="page" id="page-expenses">
+<div class="page active" id="page-expenses">
 <div class="wrap">
 
   <div class="exp-header">
@@ -597,6 +597,8 @@ select option, select optgroup { background: var(--s2); }
     </div>
     <div class="header-actions">
       <button class="btn btn-secondary" onclick="exportCSV()">⬇ Export CSV</button>
+      <button class="btn btn-secondary" onclick="exportJSON()" title="Backup ALL data (expenses + miles) to a JSON file">💾 Backup JSON</button>
+      <label  class="btn btn-secondary" title="Restore from a previously saved JSON backup" style="cursor:pointer;margin:0;">📂 Restore JSON<input type="file" accept=".json" style="display:none" onchange="importJSON(this)"></label>
       <button class="btn btn-danger"    onclick="confirmResetAll()">⚠ Reset All</button>
     </div>
   </div>
@@ -1190,6 +1192,71 @@ function exportCSV(){
   const url=URL.createObjectURL(blob);
   const a=Object.assign(document.createElement('a'),{href:url,download:`expenses_${fmtDate(new Date())}.csv`});
   a.click(); URL.revokeObjectURL(url); showToast('CSV exported ✓','success');
+}
+
+/* ── JSON BACKUP / RESTORE ─────────────────────────────────────── */
+function exportJSON() {
+  const backup = {
+    _version: 1,
+    _exported: new Date().toISOString(),
+    expenses: S,
+    miles: {
+      version:      MT_DATA_VERSION,
+      balances:     mtBalances,
+      redemptions:  mtRedemptions,
+      earnings:     mtEarnings,
+      expiry:       mtExpiry
+    }
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), {
+    href:     url,
+    download: `WA_Finance_Backup_${fmtDate(new Date())}.json`
+  });
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Backup saved ✓', 'success');
+}
+
+function importJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const backup = JSON.parse(e.target.result);
+      if (!backup._version || !backup.expenses || !backup.miles) {
+        showToast('Invalid backup file.', 'error'); return;
+      }
+      if (!confirm(`Restore backup from ${backup._exported ? backup._exported.slice(0,10) : 'unknown date'}?\n\nThis will overwrite your current data.`)) return;
+
+      // Restore expenses
+      S = backup.expenses;
+      localStorage.setItem(STORE_KEY, JSON.stringify(S));
+
+      // Restore miles
+      const m = backup.miles;
+      mtBalances    = m.balances    || {};
+      mtRedemptions = m.redemptions || [];
+      mtEarnings    = m.earnings    || [];
+      mtExpiry      = m.expiry      || {};
+      mtSave('mt_version',     MT_DATA_VERSION);
+      mtSave('mt_balances',    mtBalances);
+      mtSave('mt_redemptions', mtRedemptions);
+      mtSave('mt_earnings',    mtEarnings);
+      mtSave('mt_expiry',      mtExpiry);
+
+      renderAll();
+      mtRenderAll();
+      renderOverview();
+      showToast('Data restored ✓', 'success');
+    } catch(err) {
+      showToast('Failed to parse backup: ' + err.message, 'error');
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
 }
 
 function confirmResetAll(){
