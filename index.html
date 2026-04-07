@@ -668,7 +668,7 @@ select option, select optgroup { background: var(--s2); }
   <div class="panel">
     <div class="panel-head">
       <div class="panel-title">Recent Entries <span class="pill" id="entryCountPill">0</span></div>
-      <span style="font-size:12px;color:var(--muted);">Current cycle · newest first · max 50</span>
+      <button id="toggleEntriesBtn" onclick="toggleShowAllEntries()" style="font-size:12px;color:var(--muted);background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;">Show all</button>
     </div>
     <div id="entriesBody"></div>
   </div>
@@ -1180,13 +1180,22 @@ function renderCards() {
   });
 }
 
+let _showAllEntries = false;
+function toggleShowAllEntries() {
+  _showAllEntries = !_showAllEntries;
+  const btn = document.getElementById('toggleEntriesBtn');
+  if (btn) btn.textContent = _showAllEntries ? 'Show less' : 'Show all';
+  renderEntries();
+}
 function renderEntries() {
   const el=document.getElementById('entriesBody');
   document.getElementById('entryCountPill').textContent=S.entries.length;
   if(!S.entries.length) { el.innerHTML=`<div class="empty-state"><span class="icon">📭</span>No entries yet in this cycle.<br>Add your first transaction above.</div>`; return; }
-  const sorted=[...S.entries].sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id).slice(0,50);
-  const rows=sorted.map(e=>{const code=CARDS[e.cardId]?CARDS[e.cardId].code:e.cardId;return`<tr><td class="td-date">${e.date}</td><td class="td-desc" title="${escHtml(e.description)}">${escHtml(e.description)||'<span style="color:var(--muted)">—</span>'}</td><td class="td-card">${escHtml(code)}</td><td class="td-cat">${escHtml(e.category)}</td><td class="td-amt">S$${e.amount.toFixed(2)}</td><td class="td-del"><button class="del-btn" onclick="deleteEntry(${e.id})" title="Delete">×</button></td></tr>`;}).join('');
-  el.innerHTML=`<table class="entry-table"><thead><tr><th>Date</th><th>Description</th><th>Card</th><th>Category</th><th class="r">Amount</th><th></th></tr></thead><tbody>${rows}</tbody></table>${S.entries.length>50?`<div style="text-align:center;padding:12px 0;font-size:12px;color:var(--muted);">Showing 50 of ${S.entries.length} entries.</div>`:''}`;
+  const sorted=[...S.entries].sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+  const display = _showAllEntries ? sorted : sorted.slice(0,50);
+  const rows=display.map(e=>{const code=CARDS[e.cardId]?CARDS[e.cardId].code:e.cardId;return`<tr><td class="td-date">${e.date}</td><td class="td-desc" title="${escHtml(e.description)}">${escHtml(e.description)||'<span style="color:var(--muted)">—</span>'}</td><td class="td-card">${escHtml(code)}</td><td class="td-cat">${escHtml(e.category)}</td><td class="td-amt">S$${e.amount.toFixed(2)}</td><td class="td-del"><button class="del-btn" onclick="deleteEntry(${e.id})" title="Delete">×</button></td></tr>`;}).join('');
+  const footNote = !_showAllEntries && sorted.length>50 ? `<div style="text-align:center;padding:12px 0;font-size:12px;color:var(--muted);">Showing 50 of ${sorted.length} entries · click "Show all" to expand</div>` : '';
+  el.innerHTML=`<table class="entry-table"><thead><tr><th>Date</th><th>Description</th><th>Card</th><th>Category</th><th class="r">Amount</th><th></th></tr></thead><tbody>${rows}</tbody></table>${footNote}`;
 }
 
 function renderArchive() {
