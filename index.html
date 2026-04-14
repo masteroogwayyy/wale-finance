@@ -628,6 +628,7 @@ select option, select optgroup { background: var(--s2); }
             <option value="LE_ULC">UOB Lady's Card (LE ULC)</option>
             <option value="LE_PPV">UOB Preferred Platinum (LE PPV)</option>
             <option value="LE_UPM">UOB PriviMiles (LE UPM)</option>
+            <option value="LE_UVS">UOB Visa Signature (LE UVS)</option>
           </optgroup>
           <optgroup label="Cash">
             <option value="CASH">Cash</option>
@@ -910,6 +911,7 @@ const CARDS = {
   LE_ULC: { name:"UOB Lady's Card",          code:"LE ULC", group:"le",   resetDay:30, cats:{ Beauty:1000 } },
   LE_PPV: { name:"UOB Preferred Platinum",   code:"LE PPV", group:"le",   resetDay:30, cats:{ Paywave:600, Online:600 } },
   LE_UPM: { name:"UOB PriviMiles",           code:"LE UPM", group:"le",   resetDay:30, cats:{ GenSpend:null } },
+  LE_UVS: { name:"UOB Visa Signature",       code:"LE UVS", group:"le",   resetDay:30, cats:{ Paywave:1200, FCY:1200 } },
   CASH:   { name:"Cash",                     code:"CASH",   group:"cash", resetDay:1,  cats:{ General:null } },
 };
 
