@@ -1146,6 +1146,27 @@ function checkCycleResets() {
   if(resetted.length>0) { saveState(); showToast(`🔄 Cycle reset: ${[...new Set(resetted)].join(', ')}`, 'success', 6000); }
 }
 
+// Sweep for entries that pre-date the current cycle start (orphaned when lastReset
+// was initialised without a prior archive pass — e.g. first open after a reset date).
+function cleanupStaleEntries() {
+  let cleaned = false;
+  Object.keys(CARDS).forEach(id => {
+    const card = CARDS[id];
+    const cycleStartDate = parseDate(S.lastReset[id]);
+    const stale = S.entries.filter(e => e.cardId === id && parseDate(e.date) < cycleStartDate);
+    if (stale.length > 0) {
+      stale.forEach(e => {
+        const label = cycleLabel(fmtDate(cycleStart(parseDate(e.date), card.resetDay)));
+        if (!S.archive[label]) S.archive[label] = [];
+        S.archive[label].push(e);
+      });
+      S.entries = S.entries.filter(e => !(e.cardId === id && parseDate(e.date) < cycleStartDate));
+      cleaned = true;
+    }
+  });
+  if (cleaned) { saveState(); showToast('🧹 Moved pre-cycle entries to archive', 'warning', 5000); }
+}
+
 function computeSpend() {
   const out={};
   Object.keys(CARDS).forEach(id=>{ out[id]={}; Object.keys(CARDS[id].cats).forEach(cat=>{ out[id][cat]=0; }); });
@@ -1697,7 +1718,7 @@ function renderOverview(){
   // Load all state (async — fetches from Google Sheets if configured)
   await loadAllState();
 
-  checkCycleResets(); syncCatDropdown(); renderAll();
+  checkCycleResets(); cleanupStaleEntries(); syncCatDropdown(); renderAll();
 
   // Miles
   document.getElementById('rDate').value = todayStr();
