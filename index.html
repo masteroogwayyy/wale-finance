@@ -495,6 +495,24 @@ select option, select optgroup { background: var(--s2); }
 .sync-dot.ok      { background: var(--green); }
 .sync-dot.error   { background: var(--red); }
 @keyframes syncpulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+/* ── Miles History Table ── */
+.mh-wrap { overflow-x: auto; margin-top: 4px; }
+.mh-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mh-table th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.mh-table th:first-child { text-align: left; }
+.mh-table td { padding: 9px 10px; text-align: right; border-bottom: 1px solid rgba(68,64,60,0.35); color: #cbd5e1; white-space: nowrap; }
+.mh-table td:first-child { text-align: left; font-weight: 600; color: var(--text); }
+.mh-table tr:last-child td { border-bottom: none; font-weight: 700; color: var(--text); background: rgba(255,255,255,0.04); }
+.mh-table tr:hover td { background: rgba(255,255,255,0.03); }
+.mh-earned-pos { color: #4ade80; }
+.mh-earned-neg { color: #f87171; }
+.mh-earned-zero { color: var(--muted); }
+.mh-owner-wa  { color: #60a5fa; font-size: 10px; margin-left: 4px; }
+.mh-owner-wle { color: #e879f9; font-size: 10px; margin-left: 4px; }
+.mh-section-toggle { cursor: pointer; user-select: none; }
+.mh-section-toggle:hover { opacity: 0.8; }
+
 </style>
 </head>
 <body>
@@ -578,6 +596,17 @@ select option, select optgroup { background: var(--s2); }
     <div class="ov-list-row">
       <span class="ov-list-label">🟢 KrisFlyer miles expire 3 years from credit date</span>
       <span class="ov-list-val" style="color:var(--green);">Track</span>
+    </div>
+  </div>
+
+  <!-- Monthly Miles Earned History -->
+  <div class="ov-panel" style="margin-bottom:20px;">
+    <div class="ov-panel-title mh-section-toggle" onclick="toggleMilesHistory()">
+      📈 Miles Earned by Month
+      <span style="float:right;font-size:11px;color:var(--muted);font-weight:400;" id="mhToggleHint">▼ collapse</span>
+    </div>
+    <div id="mhTableWrap" class="mh-wrap">
+      <div class="empty-state" id="mhEmpty">Loading…</div>
     </div>
   </div>
 
@@ -1371,6 +1400,15 @@ const MT_DEFAULT_BALANCES = {
 };
 // ── SKILL_UPDATE_END ────────────────────────────────────────────
 
+// ── MILES MONTHLY HISTORY ────────────────────────────────────────
+// Updated each month alongside MT_DEFAULT_BALANCES
+const MT_MONTHLY_HISTORY = [
+  { month: 'Mar-26', balances: { citi_rewards_wa: 170700, citi_pm_wa: 127899, citi_prestige_wa: 203165, dbs_wa: 4100,  hsbc_wa: 110036, uob_wa: 170038, uob_wle: 46275, kf_wa: 81647, kf_wle: 2733 } },
+  { month: 'Apr-26', balances: { citi_rewards_wa: 178740, citi_pm_wa: 132591, citi_prestige_wa: 204458, dbs_wa: 7886,  hsbc_wa: 127998, uob_wa: 177803, uob_wle: 50309, kf_wa: 81647, kf_wle: 2733 } },
+];
+// ────────────────────────────────────────────────────────────────
+
+
 const PROGRAMS = [
   { id:'citi_rewards_wa',   name:'Citi Rewards',       owner:'WA',  bank:'Citi',      unit:'TYP',       color:'#60a5fa', kfRate:0.4,  rateNote:'1 TYP → 0.4 KF Mile',        expiryNote:'No expiry (card active)',   key:'Citi Rewards (WA)' },
   { id:'citi_pm_wa',        name:'Citi PremierMiles',  owner:'WA',  bank:'Citi',      unit:'Citi Miles', color:'#38bdf8', kfRate:1.0,  rateNote:'1 Citi Mile → 1 KF Mile',     expiryNote:'No expiry (card active)',   key:'Citi PremierMiles (WA)' },
@@ -1656,6 +1694,94 @@ document.querySelectorAll('.miles-tabs .miles-tab').forEach(tab=>{
 /* ═══════════════════════════════════════════════════════
    ──────────────  OVERVIEW  ──────────────
 ═══════════════════════════════════════════════════════ */
+
+/* ─── Miles Earned History ─────────────────────────────────── */
+let mhCollapsed = false;
+function toggleMilesHistory() {
+  mhCollapsed = !mhCollapsed;
+  document.getElementById('mhTableWrap').style.display = mhCollapsed ? 'none' : '';
+  document.getElementById('mhToggleHint').textContent = mhCollapsed ? '▶ expand' : '▼ collapse';
+}
+
+function renderMilesHistory() {
+  const wrap = document.getElementById('mhTableWrap');
+  const history = MT_MONTHLY_HISTORY;
+  if (!history || history.length < 2) {
+    wrap.innerHTML = '<div class="empty-state"><span class="icon">📈</span>Need at least 2 months of data.</div>';
+    return;
+  }
+
+  // Build months list
+  const months = history.map(h => h.month);
+
+  // Header row
+  let thead = '<tr><th>Program</th>';
+  for (let i = 1; i < months.length; i++) {
+    thead += `<th colspan="2" style="text-align:center;border-left:1px solid var(--border)">${months[i]}</th>`;
+  }
+  thead += `<th colspan="2" style="text-align:center;border-left:1px solid var(--border)">Total Earned</th></tr>`;
+
+  // Sub-header
+  let subhead = '<tr><th></th>';
+  for (let i = 1; i < months.length; i++) {
+    subhead += `<th style="border-left:1px solid var(--border)">Pts/Miles</th><th>KF Equiv</th>`;
+  }
+  subhead += `<th style="border-left:1px solid var(--border)">Pts/Miles</th><th>KF Equiv</th></tr>`;
+
+  // Data rows per program
+  let rows = '';
+  let colTotalsPts = new Array(months.length - 1).fill(0);
+  let colTotalsKF  = new Array(months.length - 1).fill(0);
+  let grandTotalPts = 0, grandTotalKF = 0;
+
+  PROGRAMS.forEach(p => {
+    const ownerSpan = p.owner === 'WA'
+      ? `<span class="mh-owner-wa">WA</span>`
+      : `<span class="mh-owner-wle">WLE</span>`;
+    let row = `<td>${p.name} ${ownerSpan}</td>`;
+    let programTotalPts = 0, programTotalKF = 0;
+
+    for (let i = 1; i < months.length; i++) {
+      const prev = (history[i-1].balances[p.id] || 0);
+      const curr = (history[i].balances[p.id]   || 0);
+      const delta = curr - prev;
+      const kf    = Math.round(delta * p.kfRate);
+      const cls   = delta > 0 ? 'mh-earned-pos' : (delta < 0 ? 'mh-earned-neg' : 'mh-earned-zero');
+      const sign  = delta > 0 ? '+' : '';
+      row += `<td style="border-left:1px solid var(--border)" class="${cls}">${sign}${mtFmt(delta)}</td>`;
+      row += `<td class="${cls}">${sign}${mtFmt(kf)}</td>`;
+      colTotalsPts[i-1] += delta;
+      colTotalsKF[i-1]  += kf;
+      programTotalPts   += delta;
+      programTotalKF    += kf;
+    }
+    const totCls = programTotalPts > 0 ? 'mh-earned-pos' : (programTotalPts < 0 ? 'mh-earned-neg' : 'mh-earned-zero');
+    const totSign = programTotalPts > 0 ? '+' : '';
+    row += `<td style="border-left:1px solid var(--border)" class="${totCls}">${totSign}${mtFmt(programTotalPts)}</td>`;
+    row += `<td class="${totCls}">${totSign}${mtFmt(programTotalKF)}</td>`;
+    grandTotalPts += programTotalPts;
+    grandTotalKF  += programTotalKF;
+    rows += `<tr>${row}</tr>`;
+  });
+
+  // Totals row
+  let totRow = '<td>TOTAL</td>';
+  for (let i = 0; i < colTotalsPts.length; i++) {
+    const cls  = colTotalsPts[i] > 0 ? 'mh-earned-pos' : 'mh-earned-zero';
+    const sign = colTotalsPts[i] > 0 ? '+' : '';
+    totRow += `<td style="border-left:1px solid var(--border)" class="${cls}">${sign}${mtFmt(colTotalsPts[i])}</td>`;
+    totRow += `<td class="${cls}">${sign}${mtFmt(colTotalsKF[i])}</td>`;
+  }
+  const gtCls  = grandTotalKF > 0 ? 'mh-earned-pos' : 'mh-earned-zero';
+  const gtSign = grandTotalKF > 0 ? '+' : '';
+  totRow += `<td style="border-left:1px solid var(--border)" class="${gtCls}">${gtSign}${mtFmt(grandTotalPts)}</td>`;
+  totRow += `<td class="${gtCls}">${gtSign}${mtFmt(grandTotalKF)} mi</td>`;
+  rows += `<tr>${totRow}</tr>`;
+
+  wrap.innerHTML = `<table class="mh-table"><thead>${thead}${subhead}</thead><tbody>${rows}</tbody></table>`;
+}
+/* ──────────────────────────────────────────────────────────── */
+
 function renderOverview(){
   // Miles totals
   let totalKF=0, waKF=0;
@@ -1689,6 +1815,9 @@ function renderOverview(){
     const ownerClass=p.owner==='WA'?'tag-wa':'tag-wle';
     return`<div class="ov-list-row"><span class="ov-list-label">${p.name} <span class="owner-tag ${ownerClass}" style="font-size:10px;padding:2px 7px;">${p.owner}</span> <span style="font-size:11px;color:var(--muted);">(${mtFmt(bal)} ${p.unit})</span></span><span class="ov-list-val" style="color:var(--green)">${mtFmt(kf)} mi</span></div>`;
   }).join('');
+
+  // Miles history
+  renderMilesHistory();
 
   // Card spend list
   const cardSpend=document.getElementById('ovCardSpend');
