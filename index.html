@@ -1714,19 +1714,23 @@ function renderMilesHistory() {
   // Build months list
   const months = history.map(h => h.month);
 
+  const showTotal = months.length > 2; // only meaningful with 3+ months
+
   // Header row
   let thead = '<tr><th>Program</th>';
   for (let i = 1; i < months.length; i++) {
     thead += `<th colspan="2" style="text-align:center;border-left:1px solid var(--border)">${months[i]}</th>`;
   }
-  thead += `<th colspan="2" style="text-align:center;border-left:1px solid var(--border)">Total Earned</th></tr>`;
+  if (showTotal) thead += `<th colspan="2" style="text-align:center;border-left:1px solid var(--border)">Total Earned</th>`;
+  thead += '</tr>';
 
   // Sub-header
   let subhead = '<tr><th></th>';
   for (let i = 1; i < months.length; i++) {
     subhead += `<th style="border-left:1px solid var(--border)">Pts/Miles</th><th>KF Equiv</th>`;
   }
-  subhead += `<th style="border-left:1px solid var(--border)">Pts/Miles</th><th>KF Equiv</th></tr>`;
+  if (showTotal) subhead += `<th style="border-left:1px solid var(--border)">Pts/Miles</th><th>KF Equiv</th>`;
+  subhead += '</tr>';
 
   // Data rows per program
   let rows = '';
@@ -1772,10 +1776,12 @@ function renderMilesHistory() {
     totRow += `<td style="border-left:1px solid var(--border)" class="${cls}">${sign}${mtFmt(colTotalsPts[i])}</td>`;
     totRow += `<td class="${cls}">${sign}${mtFmt(colTotalsKF[i])}</td>`;
   }
-  const gtCls  = grandTotalKF > 0 ? 'mh-earned-pos' : 'mh-earned-zero';
-  const gtSign = grandTotalKF > 0 ? '+' : '';
-  totRow += `<td style="border-left:1px solid var(--border)" class="${gtCls}">${gtSign}${mtFmt(grandTotalPts)}</td>`;
-  totRow += `<td class="${gtCls}">${gtSign}${mtFmt(grandTotalKF)} mi</td>`;
+  if (showTotal) {
+    const gtCls  = grandTotalKF > 0 ? 'mh-earned-pos' : 'mh-earned-zero';
+    const gtSign = grandTotalKF > 0 ? '+' : '';
+    totRow += `<td style="border-left:1px solid var(--border)" class="${gtCls}">${gtSign}${mtFmt(grandTotalPts)}</td>`;
+    totRow += `<td class="${gtCls}">${gtSign}${mtFmt(grandTotalKF)} mi</td>`;
+  }
   rows += `<tr>${totRow}</tr>`;
 
   wrap.innerHTML = `<table class="mh-table"><thead>${thead}${subhead}</thead><tbody>${rows}</tbody></table>`;
