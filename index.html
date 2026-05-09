@@ -1028,7 +1028,9 @@ async function forceReloadFromSheets() {
       localStorage.setItem(STORE_KEY, JSON.stringify(S));
     }
     setSyncStatus('ok');
-    renderAll(); mtRenderAll(); renderOverview();
+    renderAll();
+    renderHero(); renderBanks(); renderRedemptions(); renderEarnings(); renderExpiryPanel();
+    renderOverview();
     showToast('Dashboard refreshed from Sheets ✓', 'success', 3000);
   } catch(err) {
     console.error('[ForceReload] Failed:', err);
@@ -1437,7 +1439,7 @@ function importJSON(input) {
       mtSave('mt_expiry',      mtExpiry);
 
       renderAll();
-      mtRenderAll();
+      renderHero(); renderBanks(); renderRedemptions(); renderEarnings(); renderExpiryPanel();
       renderOverview();
       showToast('Data restored ✓', 'success');
     } catch(err) {
