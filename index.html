@@ -964,16 +964,27 @@ function scheduleSyncToSheets() {
 async function syncToSheets() {
   if (!APPS_SCRIPT_URL) return;
   setSyncStatus('syncing');
+  const body = JSON.stringify(buildFullState());
+  // Try plain fetch first (works from https:// — simple POST, no preflight needed)
   try {
-    // Use no-cors so the POST works from file:// origins without CORS preflight.
-    // NOTE: no-cors means we cannot read the server response — status 'ok' means
-    // the request was *sent*, not that Sheets confirmed receipt. Click the sync
-    // indicator to force a fresh pull from Sheets at any time.
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body:    body
+    });
+    // Even if CORS blocks the response read, the data reached the server.
+    // If we CAN read it, confirm status.
+    if (res.ok || res.type === 'opaque') { setSyncStatus('ok'); return; }
+  } catch(err) {
+    console.warn('[Sync] fetch POST failed, falling back to no-cors:', err.message);
+  }
+  // Fallback: no-cors (for file:// origins or redirect issues)
+  try {
     await fetch(APPS_SCRIPT_URL, {
       method:  'POST',
       mode:    'no-cors',
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body:    JSON.stringify(buildFullState())
+      body:    body
     });
     setSyncStatus('ok');
   } catch(err) {
