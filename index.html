@@ -991,7 +991,7 @@ async function forceReloadFromSheets() {
   setSyncStatus('syncing');
   showToast('Fetching latest data from Sheets…', 'info', 3000);
   try {
-    const data = await jsonpLoad(APPS_SCRIPT_URL);
+    const data = await loadFromSheets(APPS_SCRIPT_URL);
     if (data.expenses && data.expenses.entries !== undefined) {
       // Merge current entries: keep everything in Sheets + any local-only entries
       const sheetsEntries = data.expenses.entries || [];
@@ -1041,7 +1041,7 @@ async function forceReloadFromSheets() {
 async function backgroundMergeFromSheets() {
   if (!APPS_SCRIPT_URL) return;
   try {
-    const data = await jsonpLoad(APPS_SCRIPT_URL);
+    const data = await loadFromSheets(APPS_SCRIPT_URL);
     if (!data.expenses || !Array.isArray(data.expenses.entries)) return;
 
     let updated = false;
@@ -1072,7 +1072,23 @@ async function backgroundMergeFromSheets() {
   }
 }
 
-// JSONP loader — works from file:// origins (no CORS issues for script tags)
+// Smart loader: fetch first (works from https:// GitHub Pages), JSONP fallback (for file:// origins)
+async function loadFromSheets(url) {
+  // Try fetch first — reliable from https:// and avoids cross-site script blocking on desktop
+  try {
+    const res = await fetch(url + '?t=' + Date.now(), { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch(fetchErr) {
+    console.warn('[Sync] fetch failed, falling back to JSONP:', fetchErr.message);
+  }
+  // JSONP fallback for file:// origins or if fetch fails
+  return jsonpLoad(url);
+}
+
+// JSONP loader — fallback for file:// origins (no CORS issues for script tags)
 function jsonpLoad(url) {
   return new Promise((resolve, reject) => {
     const cbName = '_gscb_' + Date.now();
@@ -1111,7 +1127,7 @@ async function loadAllState() {
   setSyncStatus('syncing');
   try {
     // Use JSONP to load — works from file:// origins without CORS restrictions
-    const data = await jsonpLoad(APPS_SCRIPT_URL);
+    const data = await loadFromSheets(APPS_SCRIPT_URL);
 
     // Expenses
     let needsResync = false;
