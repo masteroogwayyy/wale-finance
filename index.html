@@ -1076,7 +1076,7 @@ async function backgroundMergeFromSheets() {
 async function loadFromSheets(url) {
   // Try fetch first — reliable from https:// and avoids cross-site script blocking on desktop
   try {
-    const res = await fetch(url + '?t=' + Date.now(), { cache: 'no-store' });
+    const res = await fetch(url + '?t=' + Date.now());
     if (res.ok) {
       const data = await res.json();
       return data;
