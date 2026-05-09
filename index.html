@@ -600,6 +600,7 @@ select option, select optgroup { background: var(--s2); }
       <button class="btn btn-secondary" onclick="exportCSV()">⬇ Export CSV</button>
       <button class="btn btn-secondary" onclick="exportJSON()" title="Backup ALL data (expenses + miles) to a JSON file">💾 Backup JSON</button>
       <label  class="btn btn-secondary" title="Restore from a previously saved JSON backup" style="cursor:pointer;margin:0;">📂 Restore JSON<input type="file" accept=".json" style="display:none" onchange="importJSON(this)"></label>
+      <button class="btn btn-secondary" onclick="pasteJSONModal()" title="Paste JSON text copied from another device">📋 Paste JSON</button>
       <button class="btn btn-danger"    onclick="confirmResetAll()">⚠ Reset All</button>
     </div>
   </div>
@@ -1410,7 +1411,36 @@ function exportJSON() {
       expiry:       mtExpiry
     }
   };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const jsonStr = JSON.stringify(backup, null, 2);
+
+  // iOS Safari doesn't support the download attribute — show a copy modal instead
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if (isIOS) {
+    let modal = document.getElementById('jsonExportModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'jsonExportModal';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;';
+      modal.innerHTML = `
+        <div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;width:100%;max-width:600px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:600;color:var(--text);">Backup JSON — Copy &amp; save this</span>
+            <button onclick="document.getElementById('jsonExportModal').remove()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;">✕</button>
+          </div>
+          <textarea id="jsonExportText" style="flex:1;margin:12px;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:monospace;font-size:11px;padding:10px;resize:none;min-height:200px;" readonly></textarea>
+          <div style="padding:12px 16px;border-top:1px solid var(--border);">
+            <button onclick="navigator.clipboard.writeText(document.getElementById('jsonExportText').value).then(()=>showToast('Copied to clipboard ✓','success')).catch(()=>showToast('Select all text above and copy manually','warning',5000))" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">📋 Copy to Clipboard</button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+    }
+    document.getElementById('jsonExportText').value = jsonStr;
+    showToast('Copy the JSON, then paste it into Restore JSON on desktop', 'info', 6000);
+    return;
+  }
+
+  // Desktop: normal file download
+  const blob = new Blob([jsonStr], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = Object.assign(document.createElement('a'), {
     href:     url,
@@ -1459,6 +1489,56 @@ function importJSON(input) {
     input.value = '';
   };
   reader.readAsText(file);
+}
+
+function pasteJSONModal() {
+  let modal = document.getElementById('jsonPasteModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'jsonPasteModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;';
+    modal.innerHTML = `
+      <div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;width:100%;max-width:600px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-weight:600;color:var(--text);">Paste JSON Backup</span>
+          <button onclick="document.getElementById('jsonPasteModal').remove()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;">✕</button>
+        </div>
+        <div style="padding:12px 16px;color:var(--muted);font-size:13px;">Paste the JSON copied from your phone's Backup JSON screen.</div>
+        <textarea id="jsonPasteText" placeholder="Paste JSON here…" style="flex:1;margin:0 12px 12px;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:monospace;font-size:11px;padding:10px;resize:none;min-height:200px;"></textarea>
+        <div style="padding:12px 16px;border-top:1px solid var(--border);">
+          <button onclick="restoreFromPastedJSON()" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Restore from Pasted JSON</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  } else {
+    modal.style.display = 'flex';
+  }
+}
+
+function restoreFromPastedJSON() {
+  const text = document.getElementById('jsonPasteText').value.trim();
+  if (!text) { showToast('Nothing pasted yet', 'warning'); return; }
+  try {
+    const backup = JSON.parse(text);
+    if (!backup._version || !backup.expenses || !backup.miles) {
+      showToast('Invalid backup data.', 'error'); return;
+    }
+    if (!confirm(`Restore backup from ${backup._exported ? backup._exported.slice(0,10) : 'unknown date'}?\n\nThis will overwrite your current data.`)) return;
+    S = backup.expenses;
+    const today = today0();
+    Object.keys(CARDS).forEach(id => { if (!S.lastReset[id]) S.lastReset[id] = fmtDate(cycleStart(today, CARDS[id].resetDay)); });
+    const m = backup.miles;
+    mtBalances = m.balances || {}; mtRedemptions = m.redemptions || [];
+    mtEarnings = m.earnings || []; mtExpiry = m.expiry || {};
+    PROGRAMS.forEach(p => { if (mtBalances[p.id] === undefined) mtBalances[p.id] = MT_DEFAULT_BALANCES[p.id] || 0; });
+    localStorage.setItem(STORE_KEY, JSON.stringify(S));
+    scheduleSyncToSheets();
+    renderAll(); renderHero(); renderBanks(); renderRedemptions(); renderEarnings(); renderExpiryPanel(); renderOverview();
+    document.getElementById('jsonPasteModal').remove();
+    showToast('Data restored ✓', 'success');
+  } catch(err) {
+    showToast('Failed to parse: ' + err.message, 'error');
+  }
 }
 
 function confirmResetAll(){
