@@ -925,7 +925,7 @@ let S = { entries:[], archive:{}, lastReset:{} };
    Leave empty ('') to run in local-only mode (original localStorage behaviour).
    See GoogleAppsScript.gs for full setup instructions.
 ──────────────────────────────────────────────────────────────────────── */
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwQh-V5f3ntX7b0QwTG-JSO_Or-lBEwSp2V8ng7G8n9NiRD8Hp6L6pbGCWnmZWAHEvd/exec'
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwrS3jDqa8qI8OBRku8qsj1WfmE12e4WQZptaDtBucCkLwyvoxtX5_YfQeg1r1jbDIz/exec'
 /* ─── SYNC UTILITIES ──────────────────────────────────────────────── */
 function setSyncStatus(state) {
   const dot   = document.getElementById('syncDot');
@@ -943,8 +943,13 @@ function setSyncStatus(state) {
 }
 
 function buildFullState() {
+  // Archive is excluded — it's exported to Excel monthly and never needs to sync.
+  // Only sync current entries, lastReset, and miles data to stay under Sheets cell limits.
   return {
-    expenses: S,
+    expenses: {
+      entries:   S.entries   || [],
+      lastReset: S.lastReset || {}
+    },
     miles: {
       version:      MT_DATA_VERSION,
       balances:     mtBalances,
@@ -1010,22 +1015,14 @@ async function forceReloadFromSheets() {
       const sheetsIds = new Set(sheetsEntries.map(e => e.id));
       const localOnly = (S.entries || []).filter(e => !sheetsIds.has(e.id));
 
-      S = data.expenses;
+      // Merge entries: keep Sheets entries + any local-only ones not yet pushed
+      S.entries   = data.expenses.entries   || [];
+      S.lastReset = data.expenses.lastReset || {};
       if (localOnly.length > 0) {
         S.entries = [...S.entries, ...localOnly];
         scheduleSyncToSheets(); // push merged state back up
       }
-
-      // Merge archive
-      const sheetsArchive = data.expenses.archive || {};
-      Object.entries(S.archive || {}).forEach(([cycle, localEntries]) => {
-        if (!Array.isArray(localEntries)) return;
-        if (!sheetsArchive[cycle]) sheetsArchive[cycle] = [];
-        const sheetsArchiveIds = new Set(sheetsArchive[cycle].map(e => e.id));
-        const orphans = localEntries.filter(e => !sheetsArchiveIds.has(e.id));
-        if (orphans.length > 0) { sheetsArchive[cycle].push(...orphans); scheduleSyncToSheets(); }
-      });
-      S.archive = sheetsArchive;
+      // Archive lives in localStorage only — never sync it from Sheets
 
       // Miles
       const miles = data.miles || {};
@@ -1067,15 +1064,7 @@ async function backgroundMergeFromSheets() {
       showToast(`↓ Pulled ${newEntries.length} new entr${newEntries.length===1?'y':'ies'} from another device`, 'success', 5000);
     }
 
-    // Check archive
-    const sheetsArchive = data.expenses.archive || {};
-    Object.entries(sheetsArchive).forEach(([cycle, sheetsEntries]) => {
-      if (!Array.isArray(sheetsEntries)) return;
-      if (!S.archive[cycle]) S.archive[cycle] = [];
-      const localIds = new Set(S.archive[cycle].map(e => e.id));
-      const newArchived = sheetsEntries.filter(e => !localIds.has(e.id));
-      if (newArchived.length > 0) { S.archive[cycle].push(...newArchived); updated = true; }
-    });
+    // Archive is local-only — no archive merge from Sheets
 
     if (updated) {
       localStorage.setItem(STORE_KEY, JSON.stringify(S));
