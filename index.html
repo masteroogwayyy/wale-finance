@@ -261,7 +261,7 @@ select option, select optgroup { background: var(--s2); }
 .cat-amounts.ok   { color: var(--text); }
 .cat-amounts.warn { color: var(--amber); }
 .cat-amounts.over { color: var(--red); }
-.bar-track { height: 5px; background: var(--s2); border-radius: 3px; position: relative; overflow: visible; }
+.bar-track { height: 5px; background: var(--s2); border-radius: 3px; position: relative; overflow: hidden; }
 .bar-fill { position: absolute; top:0; left:0; height:5px; border-radius:3px; transition: width 0.4s ease; min-width:0; }
 .bar-fill.neutral { background: var(--accent); }
 .bar-fill.warn    { background: var(--amber); }
@@ -1313,7 +1313,7 @@ function renderCards() {
         const pct=limit>0?(spent/limit)*100:0; const overage=spent>limit?spent-limit:0;
         let barClass='neutral',amtClass='ok';
         if(pct>=100){barClass='over';amtClass='over';} else if(pct>=80){barClass='warn';amtClass='warn';}
-        const barW=Math.min(pct,140).toFixed(1);
+        const barW=Math.min(pct,100).toFixed(1);
         catsHTML+=`<div class="cat-block"><div class="cat-meta"><span class="cat-name">${cat}</span><span class="cat-amounts ${amtClass}">S$${spent.toFixed(2)} / S$${limit.toLocaleString()}</span></div><div class="bar-track"><div class="bar-fill ${barClass}" style="width:${barW}%"></div></div>${overage>0?`<div class="overage-label">S$${overage.toFixed(2)} over limit</div>`:''}</div>`;
       }
     });
