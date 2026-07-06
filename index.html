@@ -261,7 +261,7 @@ select option, select optgroup { background: var(--s2); }
 .cat-amounts.ok   { color: var(--text); }
 .cat-amounts.warn { color: var(--amber); }
 .cat-amounts.over { color: var(--red); }
-.bar-track { height: 5px; background: var(--s2); border-radius: 3px; position: relative; overflow: hidden; }
+.bar-track { height: 5px; background: var(--s2); border-radius: 3px; position: relative; overflow: visible; }
 .bar-fill { position: absolute; top:0; left:0; height:5px; border-radius:3px; transition: width 0.4s ease; min-width:0; }
 .bar-fill.neutral { background: var(--accent); }
 .bar-fill.warn    { background: var(--amber); }
@@ -1313,7 +1313,7 @@ function renderCards() {
         const pct=limit>0?(spent/limit)*100:0; const overage=spent>limit?spent-limit:0;
         let barClass='neutral',amtClass='ok';
         if(pct>=100){barClass='over';amtClass='over';} else if(pct>=80){barClass='warn';amtClass='warn';}
-        const barW=Math.min(pct,100).toFixed(1);
+        const barW=Math.min(pct,140).toFixed(1);
         catsHTML+=`<div class="cat-block"><div class="cat-meta"><span class="cat-name">${cat}</span><span class="cat-amounts ${amtClass}">S$${spent.toFixed(2)} / S$${limit.toLocaleString()}</span></div><div class="bar-track"><div class="bar-fill ${barClass}" style="width:${barW}%"></div></div>${overage>0?`<div class="overage-label">S$${overage.toFixed(2)} over limit</div>`:''}</div>`;
       }
     });
@@ -1553,17 +1553,17 @@ function renderAll(){renderCards();renderEntries();renderArchive();}
 ═══════════════════════════════════════════════════════ */
 
 // ── SKILL_UPDATE_BEGIN ──────────────────────────────────────────
-// Skill: monthly-cc-update | Last updated: 2026-05-08
-const MT_DATA_VERSION = 'v3_2026-05-08';
+// Skill: monthly-cc-update | Last updated: 2026-07-03
+const MT_DATA_VERSION = 'v3_2026-07-03';
 const MT_DEFAULT_BALANCES = {
-  citi_rewards_wa:    178740,
-  citi_pm_wa:         132591,
-  citi_prestige_wa:   204458,
-  dbs_wa:               7886,
-  hsbc_wa:            127998,
-  uob_wa:             177803,
-  uob_wle:             50309,
-  kf_wa:               81647,
+  citi_rewards_wa:    185820,
+  citi_pm_wa:         132605,
+  citi_prestige_wa:   205446,
+  dbs_wa:               11805,
+  hsbc_wa:            143602,
+  uob_wa:             178723,
+  uob_wle:             61565,
+  kf_wa:              102469,
   kf_wle:               2733
 };
 // ── SKILL_UPDATE_END ────────────────────────────────────────────
@@ -1573,7 +1573,7 @@ const PROGRAMS = [
   { id:'citi_pm_wa',        name:'Citi PremierMiles',  owner:'WA',  bank:'Citi',      unit:'Citi Miles', color:'#38bdf8', kfRate:1.0,  rateNote:'1 Citi Mile → 1 KF Mile',     expiryNote:'No expiry (card active)',   key:'Citi PremierMiles (WA)' },
   { id:'citi_prestige_wa',  name:'Citi Prestige',      owner:'WA',  bank:'Citi',      unit:'TYP',       color:'#818cf8', kfRate:0.4,  rateNote:'1 TYP → 0.4 KF Mile',        expiryNote:'No expiry (card active)',   key:'Citi Prestige (WA)' },
   { id:'dbs_wa',            name:"DBS Woman's World",  owner:'WA',  bank:'DBS',       unit:'DBS Pts',   color:'#f87171', kfRate:2.0,  rateNote:'1 DBS Pt → 2 KF Miles',      expiryNote:'12 months from earn date',  key:"DBS Woman's World (WA)" },
-  { id:'hsbc_wa',           name:'HSBC Visa Revolution',owner:'WA', bank:'HSBC',      unit:'HSBC Pts',  color:'#fbbf24', kfRate:0.4,  rateNote:'2.5 HSBC Pts → 1 KF Mile',   expiryNote:'No expiry (card active)',   key:'HSBC Visa Revolution (WA)' },
+  { id:'hsbc_wa',           name:'HSBC Visa Revolution',owner:'WA', bank:'HSBC',      unit:'HSBC Pts',  color:'#fbbf24', kfRate:0.3333,  rateNote:'3 HSBC Pts → 1 KF Mile',   expiryNote:'No expiry (card active)',   key:'HSBC Visa Revolution (WA)' },
   { id:'uob_wa',            name:'UOB (PPV + Solitaire)',owner:'WA',bank:'UOB',       unit:'UNI$',      color:'#60a5fa', kfRate:2.0,  rateNote:'1 UNI$ → 2 KF Miles',        expiryNote:'2 years from earn date',    key:'UOB (WA)' },
   { id:'uob_wle',           name:'UOB (Li Eng)',        owner:'WLE',bank:'UOB',       unit:'UNI$',      color:'#e879f9', kfRate:2.0,  rateNote:'1 UNI$ → 2 KF Miles',        expiryNote:'2 years from earn date',    key:'UOB (WLE)' },
   { id:'kf_wa',             name:'KrisFlyer',           owner:'WA', bank:'KrisFlyer', unit:'KF Miles',  color:'#4ade80', kfRate:1.0,  rateNote:'Native KrisFlyer Miles',      expiryNote:'3 years from credit date',  key:'KrisFlyer (WA)' },
