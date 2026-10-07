@@ -1138,6 +1138,7 @@ async function loadAllState() {
       try { const raw = localStorage.getItem(STORE_KEY); if (raw) localS = JSON.parse(raw); } catch(_) {}
 
       S = data.expenses;
+      if (!S.archive) S.archive = {};
 
       if (localS) {
         // Recover orphaned current-cycle entries
@@ -1908,6 +1909,10 @@ function renderOverview(){
 
   // Load all state (async — fetches from Google Sheets if configured)
   await loadAllState();
+
+  // Guard: Sheets never stores the archive, so S.archive can be missing when this
+  // browser has no local cache. Without this, cleanupStaleEntries() crashes and no cards render.
+  S.entries = S.entries || []; S.archive = S.archive || {}; S.lastReset = S.lastReset || {};
 
   checkCycleResets(); cleanupStaleEntries(); syncCatDropdown(); renderAll();
 
